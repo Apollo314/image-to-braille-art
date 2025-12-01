@@ -3,6 +3,7 @@ use std::{error::Error, path::Path};
 use clap::Parser;
 use image::GenericImageView;
 use palette::{IntoColor, Oklcha, Srgba};
+use std::io::Write;
 
 mod cli;
 
@@ -16,7 +17,7 @@ fn image_to_braille(
     cols: u32,
     threshold: f32,
     invert: bool,
-) -> Result<Vec<Vec<char>>, Box<dyn Error>> {
+) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
     let img = image::open(input_path)?;
     let (width, height) = img.dimensions();
 
@@ -51,35 +52,31 @@ fn image_to_braille(
         }
     }
 
-    let mut brailles: Vec<Vec<char>> = Vec::with_capacity(rows as usize);
-    for _ in 0..rows {
-        brailles.push(Vec::with_capacity(cols as usize));
-    }
+    Ok(braillable_bytes)
+}
 
-    for row in 0..rows {
-        for col in 0..cols {
-            brailles[row as usize].push(u8_to_braille(braillable_bytes[row as usize][col as usize]))
+fn write(braillable_bytes: Vec<Vec<u8>>) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    for row in braillable_bytes {
+        for byte in row {
+            write!(lock, "{}", u8_to_braille(byte))?;
         }
+        writeln!(lock, "")?;
     }
-
-    Ok(brailles)
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
-    let brailles = image_to_braille(
+    let braillable_bytes = image_to_braille(
         &args.image_path,
         args.column_width,
         args.threshold,
         args.invert,
     );
-    use std::io::Write;
-    let stdout = std::io::stdout();
-    let mut lock = stdout.lock();
-    if let Ok(brailles) = brailles {
-        for row in brailles {
-            println!("{}", row.iter().collect::<String>());
-        }
+    if let Ok(brailleble_bytes) = braillable_bytes {
+        write(brailleble_bytes)?
     }
     Ok(())
 }
