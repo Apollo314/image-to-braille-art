@@ -16,7 +16,7 @@ fn image_to_braille(
     cols: u32,
     threshold: f32,
     invert: bool,
-) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
+) -> Result<(Vec<u8>, (u32, u32)), Box<dyn Error>> {
     let img = image::open(input_path)?;
     let (width, height) = img.dimensions();
 
@@ -31,7 +31,7 @@ fn image_to_braille(
         image::imageops::FilterType::Nearest,
     );
 
-    let mut braillable_bytes = vec![vec![0u8; cols as usize]; rows as usize];
+    let mut braillable_bytes = vec![0u8; (cols * rows) as usize];
 
     for (x, y, pixel) in img.pixels() {
         let srgba_color = Srgba::from(pixel.0).into_linear();
@@ -41,36 +41,36 @@ fn image_to_braille(
             let braile_index_x = x / 2;
             let braile_index_y = y / 4;
             let braile_byte =
-                &mut braillable_bytes[braile_index_y as usize][braile_index_x as usize];
+                &mut braillable_bytes[(braile_index_y * cols + braile_index_x) as usize];
             let bit_index = (y % 4) * 2 + (x % 2);
             *braile_byte |= 1 << U8_BRAILLE_MAP[bit_index as usize];
         }
     }
 
-    Ok(braillable_bytes)
+    Ok((braillable_bytes, (cols, rows)))
 }
 
-fn write_braille(braillable_bytes: Vec<Vec<u8>>) -> std::io::Result<()> {
+fn write_braille(braillable_bytes: Vec<u8>, cols: usize) -> std::io::Result<()> {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
-    for row in braillable_bytes {
-        for byte in row {
-            write!(lock, "{}", u8_to_braille(byte))?;
+    for (i, byte) in braillable_bytes.iter().enumerate() {
+        if i % cols == 0 && i != 0 {
+            writeln!(lock, "")?;
         }
-        writeln!(lock, "")?;
+        write!(lock, "{}", u8_to_braille(*byte))?;
     }
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
-    let braillable_bytes = image_to_braille(
+    let (braillable_bytes, (cols, _rows)) = image_to_braille(
         &args.image_path,
         args.column_width,
         args.threshold,
         args.invert,
     )?;
-    write_braille(braillable_bytes)?;
+    write_braille(braillable_bytes, cols as usize)?;
     Ok(())
 }
 
