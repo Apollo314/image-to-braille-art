@@ -73,6 +73,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.threshold,
         args.invert,
     );
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
     if let Ok(brailles) = brailles {
         for row in brailles {
             println!("{}", row.iter().collect::<String>());
