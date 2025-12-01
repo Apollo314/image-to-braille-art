@@ -1,9 +1,8 @@
-use std::{error::Error, path::Path};
+use std::{error::Error, io::Write, path::Path};
 
 use clap::Parser;
 use image::GenericImageView;
 use palette::{IntoColor, Oklaba, Srgba};
-use std::io::Write;
 
 mod cli;
 
@@ -32,11 +31,7 @@ fn image_to_braille(
         image::imageops::FilterType::Nearest,
     );
 
-    let mut braillable_bytes: Vec<Vec<u8>> = Vec::with_capacity(rows as usize);
-    for _ in 0..rows {
-        let row = vec![0; cols as usize];
-        braillable_bytes.push(row);
-    }
+    let mut braillable_bytes = vec![vec![0u8; cols as usize]; rows as usize];
 
     for (x, y, pixel) in img.pixels() {
         let srgba_color = Srgba::from(pixel.0).into_linear();
@@ -47,15 +42,15 @@ fn image_to_braille(
             let braile_index_y = y / 4;
             let braile_byte =
                 &mut braillable_bytes[braile_index_y as usize][braile_index_x as usize];
-            let bit_index = (y - braile_index_y * 4) * 2 + (x - braile_index_x * 2);
-            *braile_byte += 1 << U8_BRAILLE_MAP[bit_index as usize];
+            let bit_index = (y % 4) * 2 + (x % 2);
+            *braile_byte |= 1 << U8_BRAILLE_MAP[bit_index as usize];
         }
     }
 
     Ok(braillable_bytes)
 }
 
-fn write(braillable_bytes: Vec<Vec<u8>>) -> std::io::Result<()> {
+fn write_braille(braillable_bytes: Vec<Vec<u8>>) -> std::io::Result<()> {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
     for row in braillable_bytes {
@@ -74,10 +69,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.column_width,
         args.threshold,
         args.invert,
-    );
-    if let Ok(brailleble_bytes) = braillable_bytes {
-        write(brailleble_bytes)?
-    }
+    )?;
+    write_braille(braillable_bytes)?;
     Ok(())
 }
 
