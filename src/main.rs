@@ -11,7 +11,12 @@ fn u8_to_braille(byte: u8) -> char {
     char::from_u32((byte as u32) + 0x2800).unwrap()
 }
 
-fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<dyn Error>> {
+fn image_to_braille(
+    input_path: &Path,
+    cols: u32,
+    threshold: f32,
+    invert: bool,
+) -> Result<Vec<Vec<char>>, Box<dyn Error>> {
     let img = image::open(input_path)?;
     let (width, height) = img.dimensions();
 
@@ -36,7 +41,7 @@ fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<
         let srgba_color = Srgba::from(pixel.0).into_linear();
         let oklch_pixel: Oklcha = srgba_color.into_color();
 
-        if oklch_pixel.l >= 0.5 {
+        if (invert && oklch_pixel.l <= threshold) || (!invert && oklch_pixel.l >= threshold) {
             let braile_index_x = x / 2;
             let braile_index_y = y / 4;
             let braile_byte =
@@ -62,7 +67,12 @@ fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
-    let brailles = image_to_braille(&args.image_path, args.column_width);
+    let brailles = image_to_braille(
+        &args.image_path,
+        args.column_width,
+        args.threshold,
+        args.invert,
+    );
     if let Ok(brailles) = brailles {
         for row in brailles {
             println!("{}", row.iter().collect::<String>());
