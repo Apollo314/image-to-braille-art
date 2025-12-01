@@ -2,7 +2,7 @@ use std::{error::Error, path::Path};
 
 use clap::Parser;
 use image::GenericImageView;
-use palette::{IntoColor, Oklcha, Srgba};
+use palette::{IntoColor, Oklaba, Srgba};
 use std::io::Write;
 
 mod cli;
@@ -40,9 +40,9 @@ fn image_to_braille(
 
     for (x, y, pixel) in img.pixels() {
         let srgba_color = Srgba::from(pixel.0).into_linear();
-        let oklch_pixel: Oklcha = srgba_color.into_color();
+        let oklab_pixel: Oklaba = srgba_color.into_color();
 
-        if (invert && oklch_pixel.l <= threshold) || (!invert && oklch_pixel.l >= threshold) {
+        if (invert && oklab_pixel.l <= threshold) || (!invert && oklab_pixel.l >= threshold) {
             let braile_index_x = x / 2;
             let braile_index_y = y / 4;
             let braile_byte =

@@ -9,7 +9,7 @@ pub struct Cli {
     #[arg(default_value_t = 60)]
     pub column_width: u32,
 
-    /// at which lightness value of oklch, should there be a braille dot
+    /// at which lightness value of oklab, should there be a braille dot
     #[arg(long, short, default_value_t = 0.5)]
     pub threshold: f32,
 
