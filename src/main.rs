@@ -7,27 +7,8 @@ use palette::{IntoColor, Oklcha, Srgba};
 mod cli;
 
 const U8_BRAILLE_MAP: [u8; 8] = [0, 3, 1, 4, 2, 5, 6, 7];
-// takes input bits like this:
-// 8 7 6 5 4 3 2 1
-// and turns it into proper braille character with dots filled
-// 1 2
-// 3 4
-// 5 6
-// 7 8
-fn u8_to_braille(bits: u8) -> char {
-    // for some reason, braille bit orders go like this, so we'll map them
-    // 1 4
-    // 2 5
-    // 3 6
-    // 7 8
-    let mut bytes: u32 = 0x2800;
-    for i in 0..8 {
-        let bit = (bits >> i) & 1;
-        if bit == 1 {
-            bytes += (bit as u32) << U8_BRAILLE_MAP[i]
-        }
-    }
-    char::from_u32(bytes).unwrap()
+fn u8_to_braille(byte: u8) -> char {
+    char::from_u32((byte as u32) + 0x2800).unwrap()
 }
 
 fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<dyn Error>> {
@@ -61,7 +42,7 @@ fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<
             let braile_byte =
                 &mut braillable_bytes[braile_index_y as usize][braile_index_x as usize];
             let bit_index = (y - braile_index_y * 4) * 2 + (x - braile_index_x * 2);
-            *braile_byte += 1 << bit_index;
+            *braile_byte += 1 << U8_BRAILLE_MAP[bit_index as usize];
         }
     }
 
