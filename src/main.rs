@@ -1,0 +1,103 @@
+use std::{error::Error, path::Path};
+
+use clap::Parser;
+use image::GenericImageView;
+use palette::{IntoColor, Oklcha, Srgba};
+
+mod cli;
+
+const U8_BRAILLE_MAP: [u8; 8] = [0, 3, 1, 4, 2, 5, 6, 7];
+// takes input bits like this:
+// 8 7 6 5 4 3 2 1
+// and turns it into proper braille character with dots filled
+// 1 2
+// 3 4
+// 5 6
+// 7 8
+fn u8_to_braille(bits: u8) -> char {
+    // for some reason, braille bit orders go like this, so we'll map them
+    // 1 4
+    // 2 5
+    // 3 6
+    // 7 8
+    let mut bytes: u32 = 0x2800;
+    for i in 0..8 {
+        let bit = (bits >> i) & 1;
+        if bit == 1 {
+            bytes += (bit as u32) << U8_BRAILLE_MAP[i]
+        }
+    }
+    char::from_u32(bytes).unwrap()
+}
+
+fn image_to_braille(input_path: &Path, cols: u32) -> Result<Vec<Vec<char>>, Box<dyn Error>> {
+    let img = image::open(input_path)?;
+    let (width, height) = img.dimensions();
+
+    let rows = ((height * cols) / width / 2) & !1;
+
+    let horizontal_dots = cols * 2;
+    let vertical_dots = rows * 4;
+
+    let img = img.resize_to_fill(
+        horizontal_dots,
+        vertical_dots,
+        image::imageops::FilterType::Triangle,
+    );
+
+    let mut braillable_bytes: Vec<Vec<u8>> = Vec::with_capacity(rows as usize);
+    for _ in 0..rows {
+        let row = vec![0; cols as usize];
+        braillable_bytes.push(row);
+    }
+
+    for (x, y, pixel) in img.pixels() {
+        let srgba_color = Srgba::from(pixel.0).into_linear();
+        let oklch_pixel: Oklcha = srgba_color.into_color();
+
+        if oklch_pixel.l >= 0.5 {
+            let braile_index_x = x / 2;
+            let braile_index_y = y / 4;
+            let braile_byte =
+                &mut braillable_bytes[braile_index_y as usize][braile_index_x as usize];
+            let bit_index = (y - braile_index_y * 4) * 2 + (x - braile_index_x * 2);
+            *braile_byte += 1 << bit_index;
+        }
+    }
+
+    let mut brailles: Vec<Vec<char>> = Vec::with_capacity(rows as usize);
+    for _ in 0..rows {
+        brailles.push(Vec::with_capacity(cols as usize));
+    }
+
+    for row in 0..rows {
+        for col in 0..cols {
+            brailles[row as usize].push(u8_to_braille(braillable_bytes[row as usize][col as usize]))
+        }
+    }
+
+    Ok(brailles)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = cli::Cli::parse();
+    let brailles = image_to_braille(&args.image_path, args.column_width);
+    if let Ok(brailles) = brailles {
+        for row in brailles {
+            println!("{}", row.iter().collect::<String>());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_braille() {
+        assert_eq!(u8_to_braille(0b00000000), '⠀', "blank braille failed");
+        assert_eq!(u8_to_braille(0b00000001), '⠁', "braille dots-1 failed");
+        assert_eq!(u8_to_braille(0b01000000), '⡀', "braille dots-7 failed");
+    }
+}
