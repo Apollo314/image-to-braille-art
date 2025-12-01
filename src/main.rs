@@ -29,7 +29,7 @@ fn image_to_braille(
     let img = img.resize_to_fill(
         horizontal_dots,
         vertical_dots,
-        image::imageops::FilterType::Triangle,
+        image::imageops::FilterType::Nearest,
     );
 
     let mut braillable_bytes: Vec<Vec<u8>> = Vec::with_capacity(rows as usize);
