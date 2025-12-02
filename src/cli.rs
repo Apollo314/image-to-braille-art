@@ -9,11 +9,15 @@ pub struct Cli {
     #[arg(default_value_t = 60)]
     pub column_width: u32,
 
-    /// at which lightness value of oklab, should there be a braille dot
+    /// at which lightness value of oklab should there be a braille dot
     #[arg(long, short, default_value_t = 0.5)]
     pub threshold: f32,
 
     /// invert the light and dark logic for white background
     #[arg(long, short, default_value_t = false)]
     pub invert: bool,
+
+    /// don't do Floyd–Steinberg dithering
+    #[arg(long, short, action = clap::ArgAction::SetFalse, default_value_t = true)]
+    pub dither: bool,
 }
