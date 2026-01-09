@@ -1,8 +1,11 @@
-use std::{error::Error, io::Write, path::Path};
+use std::{
+    error::Error,
+    io::{Read, Write},
+};
 
 use clap::Parser;
 use image::{
-    GenericImageView, Rgba,
+    DynamicImage, GenericImageView, Rgba,
     imageops::{ColorMap, colorops},
 };
 use palette::{IntoColor, Oklaba, Srgba};
@@ -41,13 +44,12 @@ impl ColorMap for OklabThreshold {
 }
 
 fn image_to_braille(
-    input_path: &Path,
+    img: &DynamicImage,
     cols: u32,
     threshold: f32,
     invert: bool,
     dither: bool,
-) -> Result<(Vec<u8>, (u32, u32)), Box<dyn Error>> {
-    let img = image::open(input_path)?;
+) -> (Vec<u8>, (u32, u32)) {
     let (width, height) = img.dimensions();
 
     let rows = ((height * cols) / width / 2) & !1;
@@ -87,7 +89,7 @@ fn image_to_braille(
         }
     }
 
-    Ok((braillable_bytes, (cols, rows)))
+    (braillable_bytes, (cols, rows))
 }
 
 fn write_braille(braillable_bytes: Vec<u8>, cols: usize) -> std::io::Result<()> {
@@ -95,7 +97,7 @@ fn write_braille(braillable_bytes: Vec<u8>, cols: usize) -> std::io::Result<()> 
     let mut lock = stdout.lock();
     for (i, byte) in braillable_bytes.iter().enumerate() {
         if i % cols == 0 && i != 0 {
-            writeln!(lock, "")?;
+            writeln!(lock)?;
         }
         write!(lock, "{}", u8_to_braille(*byte))?;
     }
@@ -104,13 +106,22 @@ fn write_braille(braillable_bytes: Vec<u8>, cols: usize) -> std::io::Result<()> 
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
+    let img = {
+        if args.image_path == "-" {
+            let mut buffer = vec![];
+            std::io::stdin().read_to_end(&mut buffer)?;
+            image::load_from_memory(&buffer)?
+        } else {
+            image::open(args.image_path)?
+        }
+    };
     let (braillable_bytes, (cols, _rows)) = image_to_braille(
-        &args.image_path,
+        &img,
         args.column_width,
         args.threshold,
         args.invert,
         args.dither,
-    )?;
+    );
     write_braille(braillable_bytes, cols as usize)?;
     Ok(())
 }

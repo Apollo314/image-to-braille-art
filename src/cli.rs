@@ -3,7 +3,8 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    pub image_path: std::path::PathBuf,
+    /// path of the image or a dash(-), dash means read from stdin
+    pub image_path: String,
 
     /// Column width for output, used for scaling the image.
     #[arg(default_value_t = 60)]
