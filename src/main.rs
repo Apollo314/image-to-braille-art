@@ -10,6 +10,8 @@ use image::{
 };
 use palette::{IntoColor, Oklaba, Srgba};
 
+use terminal_size::{Height, Width, terminal_size};
+
 mod cli;
 
 const U8_BRAILLE_MAP: [u8; 8] = [0, 3, 1, 4, 2, 5, 6, 7];
@@ -115,9 +117,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             image::open(args.image_path)?
         }
     };
+    let cols = args.column_width.unwrap_or({
+        let term_size = terminal_size();
+        if let Some((Width(w), _)) = term_size {
+            w as u32
+        } else {
+            60
+        }
+    });
     let (braillable_bytes, (cols, _rows)) = image_to_braille(
         &img,
-        args.column_width,
+        cols,
         args.threshold,
         args.invert,
         args.dither,
