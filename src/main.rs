@@ -1,13 +1,19 @@
 use std::{
     error::Error,
     io::{Read, Write},
+    path::Path,
 };
 
 use clap::Parser;
+use ff::software::scaling::{context::Context as Scaler, flag::Flags};
+use ff::util::format::pixel::Pixel;
+use ffmpeg_next as ff;
 use image::{
     DynamicImage, GenericImageView, Rgba,
     imageops::{ColorMap, colorops},
 };
+use std::{thread, time::Duration};
+
 use palette::{IntoColor, Oklaba, Srgba};
 
 mod cli;
@@ -104,25 +110,122 @@ fn write_braille(braillable_bytes: Vec<u8>, cols: usize) -> std::io::Result<()> 
     Ok(())
 }
 
+fn play_mp4_with_braille(
+    filepath: impl AsRef<Path>,
+    cols: u32,
+    threshold: f32,
+    invert: bool,
+    dither: bool,
+) -> Result<(), Box<dyn Error>> {
+    ff::init()?;
+
+    let mut input = ff::format::input(&filepath)?;
+    let video_stream = input
+        .streams()
+        .best(ff::media::Type::Video)
+        .ok_or("no video stream")?;
+
+    let stream_index = video_stream.index();
+
+    let fps = {
+        let rate = video_stream.rate();
+        rate.0 as f32 / rate.1 as f32
+    };
+    let delay = Duration::from_secs_f32(1.0 / fps);
+
+    let context_decoder = ff::codec::context::Context::from_parameters(video_stream.parameters())?;
+    let mut decoder = context_decoder.decoder().video()?;
+
+    let mut scaler = Scaler::get(
+        decoder.format(),
+        decoder.width(),
+        decoder.height(),
+        Pixel::RGBA,
+        decoder.width(),
+        decoder.height(),
+        Flags::BILINEAR,
+    )?;
+
+    let mut decoded = ff::frame::Video::empty();
+    let mut rgb = ff::frame::Video::empty();
+
+    for (stream, packet) in input.packets() {
+        if stream.index() != stream_index {
+            continue;
+        }
+
+        decoder.send_packet(&packet)?;
+
+        let mut lasttime = std::time::SystemTime::now();
+
+        while decoder.receive_frame(&mut decoded).is_ok() {
+            scaler.run(&decoded, &mut rgb)?;
+
+            let width = rgb.width();
+            let height = rgb.height();
+
+            let mut buf = Vec::with_capacity((width * height * 4) as usize);
+
+            let data = rgb.data(0);
+            let stride = rgb.stride(0);
+
+            for y in 0..height as usize {
+                let row_start = y * stride;
+                let row_end = row_start + (width * 4) as usize;
+                buf.extend_from_slice(&data[row_start..row_end]);
+            }
+
+            let img = DynamicImage::ImageRgba8(
+                image::RgbaImage::from_raw(width, height, buf).ok_or("failed to build image")?,
+            );
+
+            let (braille, (cols, _rows)) = image_to_braille(&img, cols, threshold, invert, dither);
+
+            print!("\x1B[H\x1B[2J");
+            write_braille(braille, cols as usize)?;
+
+            let elapsed = lasttime.elapsed()?;
+            lasttime = std::time::SystemTime::now();
+
+            if delay > elapsed {
+                thread::sleep(delay - elapsed);
+            }
+        }
+    }
+
+    decoder.send_eof()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
-    let img = {
-        if args.image_path == "-" {
-            let mut buffer = vec![];
-            std::io::stdin().read_to_end(&mut buffer)?;
-            image::load_from_memory(&buffer)?
-        } else {
-            image::open(args.image_path)?
-        }
-    };
-    let (braillable_bytes, (cols, _rows)) = image_to_braille(
-        &img,
-        args.column_width,
-        args.threshold,
-        args.invert,
-        args.dither,
-    );
-    write_braille(braillable_bytes, cols as usize)?;
+    if args.image_path.ends_with(".mp4") || args.image_path.ends_with("mkv") {
+        play_mp4_with_braille(
+            args.image_path,
+            args.column_width,
+            args.threshold,
+            args.invert,
+            args.dither,
+        )?;
+    } else {
+        let img = {
+            if args.image_path == "-" {
+                let mut buffer = vec![];
+                std::io::stdin().read_to_end(&mut buffer)?;
+                image::load_from_memory(&buffer)?
+            } else {
+                image::open(args.image_path)?
+            }
+        };
+        let (braillable_bytes, (cols, _rows)) = image_to_braille(
+            &img,
+            args.column_width,
+            args.threshold,
+            args.invert,
+            args.dither,
+        );
+        write_braille(braillable_bytes, cols as usize)?;
+    }
     Ok(())
 }
 
