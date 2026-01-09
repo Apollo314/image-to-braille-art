@@ -16,6 +16,8 @@ use std::{thread, time::Duration};
 
 use palette::{IntoColor, Oklaba, Srgba};
 
+use terminal_size::{Width, terminal_size};
+
 mod cli;
 
 const U8_BRAILLE_MAP: [u8; 8] = [0, 3, 1, 4, 2, 5, 6, 7];
@@ -199,10 +201,18 @@ fn play_mp4_with_braille(
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
+    let cols = args.column_width.unwrap_or({
+        let term_size = terminal_size();
+        if let Some((Width(w), _)) = term_size {
+            w as u32
+        } else {
+            60
+        }
+    });
     if args.image_path.ends_with(".mp4") || args.image_path.ends_with("mkv") {
         play_mp4_with_braille(
             args.image_path,
-            args.column_width,
+            cols,
             args.threshold,
             args.invert,
             args.dither,
@@ -217,13 +227,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 image::open(args.image_path)?
             }
         };
-        let (braillable_bytes, (cols, _rows)) = image_to_braille(
-            &img,
-            args.column_width,
-            args.threshold,
-            args.invert,
-            args.dither,
-        );
+        let (braillable_bytes, (cols, _rows)) =
+            image_to_braille(&img, cols, args.threshold, args.invert, args.dither);
         write_braille(braillable_bytes, cols as usize)?;
     }
     Ok(())
